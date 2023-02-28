@@ -1,7 +1,11 @@
 package com.adoyo.ultimatepermissionhandling
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -24,6 +28,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adoyo.ultimatepermissionhandling.ui.theme.UltimatePermissionHandlingTheme
 
 class MainActivity : ComponentActivity() {
+    private val permissionsToRequest = arrayOf(
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.CALL_PHONE,
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -43,6 +52,17 @@ class MainActivity : ComponentActivity() {
                                 permission = Manifest.permission.CAMERA,
                                 isGranted = isGranted
                             )
+                        }
+                    )
+                    val multiplePermissionResultLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestMultiplePermissions(),
+                        onResult = { perms ->
+                            permissionsToRequest.forEach { permission ->
+                                viewModel.onPermissionResult(
+                                    permission = permission,
+                                    isGranted = perms[permission] == true
+                                )
+                            }
                         }
                     )
 
@@ -66,9 +86,42 @@ class MainActivity : ComponentActivity() {
                         }
 
                     }
+                    dialogueQueue.reversed().forEach { permission ->
+                        PermissionDialog(
+                            permissionTextProvider = when (permission) {
+                                Manifest.permission.CAMERA -> {
+                                    CameraPermissionTextProvider()
+                                }
+
+                                Manifest.permission.RECORD_AUDIO -> {
+                                    RecordAudioPermissionTextProvider()
+                                }
+
+                                Manifest.permission.CALL_PHONE -> {
+                                    PhoneCallPermissionTextProvider()
+                                }
+
+                                else -> return@forEach
+                            },
+                            isPermanentlyDeclined = !shouldShowRequestPermissionRationale(permission),
+                            onDismiss = viewModel::dismissDialog,
+                            onOkClick = {
+                                viewModel.dismissDialog()
+                                multiplePermissionResultLauncher.launch(arrayOf(permission))
+                            },
+                            onGoToAppSettingsClick = ::openSettings
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+fun Activity.openSettings() {
+    Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", packageName, null)
+    ).also(::startActivity)
 }
 
